@@ -137,13 +137,12 @@ python results/helper/print_bpm_results.py
 
 ---
 
-## Team
+## Team members
 
-| Name 
-|------
-| Aditi Anil Pulikottil
-| Anushka Rawlani 
-| Ubika Singh 
+Aditi Anil Pulikottil
+Ubika Singh 
+Anushka Rawlani 
+
 
 **Mentor:** Dr. Ruchira Naskar
 **PhD Research Guide:** Ms. Shreya Bhadra  
