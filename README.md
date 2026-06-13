@@ -68,16 +68,17 @@ Low-Light-Heart-Rate-Estimation/
 │   ├── tools/                         # Signal visualization and analysis utilities
 │   └── main.py
 ├── results/
-│   ├── pickled_outputs/               # Saved test outputs (.pickle) per experiment
-│   └── helper/
+│   ├── UBFC_training/                 # Plots, Bland-Altman, test outputs
+│   ├── UBFC_MMPD_pretraining/         # Bland-Altman plots
+│   ├── MMPD_retrained/                # Plots, Bland-Altman, test outputs
+│   └── helper_functions/
 │       └── print_bpm_results.py       # Script to extract and print BPM from pickles
-├── data/                              # Dataset folder (not included - see below)
+├── data/                              # Dataset folder (not included — see below)
 │   ├── MMPD/
 │   └── UBFC-rPPG/
 ├── docs/                              # Reference papers
 └── README.md
 ```
-
 ---
 
 ## Setup
@@ -137,16 +138,14 @@ python results/helper/print_bpm_results.py
 
 ---
 
-## Team members
+## Team
 
-Aditi Anil Pulikottil
-Ubika Singh 
-Anushka Rawlani 
+Aditi Anil Pulikottil  
+Ubika Singh  
+Anushka Rawlani  
 
-
-**Mentor:** Dr. Ruchira Naskar
-**PhD Research Guide:** Ms. Shreya Bhadra  
-
+**Faculty Mentor:** Dr. Ruchira Naskar  
+**Research Guide:** Ms. Shreya Bhadra (PhD Scholar)
 
 ---
 
