@@ -2,7 +2,7 @@ import pickle
 import numpy as np
 from scipy.signal import welch
 
-pickle_path = 'runs/exp/UBFC-rPPG_SizeW72_SizeH72_ClipLength180_DataTypeDiffNormalized_Standardized_DataAugNone_LabelTypeDiffNormalized_Crop_faceTrue_BackendHC_Large_boxTrue_Large_size1.5_Dyamic_DetFalse_det_len30_Median_face_boxFalse/saved_test_outputs/UBFC_UBFC_tscan_outputs.pickle'
+pickle_path = "Add file name to binary file to be unpickled"
 
 with open(pickle_path, 'rb') as f:
     data = pickle.load(f)
