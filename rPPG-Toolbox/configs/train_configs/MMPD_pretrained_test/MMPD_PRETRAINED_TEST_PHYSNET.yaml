@@ -1,0 +1,61 @@
+BASE: ['']
+TOOLBOX_MODE: "only_test"
+
+TEST:
+  METRICS: ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'BA']
+  USE_LAST_EPOCH: False
+  DATA:
+    FS: 30
+    DATASET: MMPD
+    DO_PREPROCESS: False
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "data/MMPD/raw"
+    CACHED_PATH: "data/MMPD/preprocessed/MMPD_SizeW72_SizeH72_ClipLength128_DataTypeDiffNormalized_DataAugNone_LabelTypeDiffNormalized_Crop_faceTrue_BackendHC_Large_boxTrue_Large_size1.5_Dyamic_DetFalse_det_len30_Median_face_boxFalse"
+    FILE_LIST_PATH: "data/MMPD/preprocessed/DataFileLists/MMPD_SizeW72_SizeH72_ClipLength128_DataTypeDiffNormalized_DataAugNone_LabelTypeDiffNormalized_Crop_faceTrue_BackendHC_Large_boxTrue_Large_size1.5_Dyamic_DetFalse_det_len30_Median_face_boxFalse_0.0_1.0.csv"
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    INFO:
+      LIGHT: [1]
+      MOTION: [1]
+      EXERCISE: [2]
+      SKIN_COLOR: [3, 4, 5, 6]
+      GENDER: [1, 2]
+      GLASSER: [1, 2]
+      HAIR_COVER: [1, 2]
+      MAKEUP: [1, 2]
+    PREPROCESS:
+      DATA_TYPE: ['DiffNormalized']
+      DATA_AUG: ['None']
+      LABEL_TYPE: DiffNormalized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 128
+      CROP_FACE:
+        DO_CROP_FACE: True
+        BACKEND: 'HC'
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY: 30
+          USE_MEDIAN_FACE_BOX: False
+      RESIZE:
+        H: 72
+        W: 72
+
+DEVICE: cuda:0
+NUM_OF_GPU_TRAIN: 1
+LOG:
+  PATH: runs/exp
+MODEL:
+  DROP_RATE: 0.2
+  NAME: Physnet
+  PHYSNET:
+    FRAME_NUM: 128
+INFERENCE:
+  BATCH_SIZE: 1
+  EVALUATION_METHOD: "FFT"
+  EVALUATION_WINDOW:
+    USE_SMALLER_WINDOW: False
+    WINDOW_SIZE: 10
+  MODEL_PATH: "pretrained_models/PhysNet/UBFC_UBFC_physnet_Epoch25.pth"
