@@ -17,13 +17,14 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "webm"}
-# Render's free tier has only 512MB RAM total for the whole process (PyTorch
-# runtime + both loaded checkpoints + Flask/gunicorn + the video itself while
-# processing). A large upload could OOM-kill the instance before Flask even
-# gets a chance to reject it gracefully, so this is deliberately much smaller
-# than the 2GB used for local testing against big raw/uncompressed test
-# clips. Real phone-recorded uploads are almost always well under this.
-MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", 150)) * 1024 * 1024
+# Render sets RENDER=true on all its instances automatically -- used here to
+# pick safe limits on Render's memory-constrained free tier (512MB RAM
+# total for PyTorch + both checkpoints + Flask + the video being processed)
+# without needing that limit locally too, where there's no such constraint.
+# MAX_UPLOAD_MB still overrides either default if set explicitly.
+_ON_RENDER = os.environ.get("RENDER") == "true"
+_DEFAULT_MAX_UPLOAD_MB = 150 if _ON_RENDER else 2048
+MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", _DEFAULT_MAX_UPLOAD_MB)) * 1024 * 1024
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH

@@ -24,10 +24,13 @@ ILLUMINATION_THRESHOLD = 80.0
 
 
 # Hard cap on output frames (after 30fps resampling), regardless of the
-# uploaded file's actual length. At 30fps this is 30s of footage --
-# comfortably enough for good whole-clip FFT resolution without needing the
-# full 60s+ clips used during accuracy testing.
-MAX_SOURCE_FRAMES = 900
+# uploaded file's actual length. Kept low on Render (30s) to bound memory on
+# its 512MB free tier; restored to the full 60s used during accuracy
+# testing when running locally, where there's no such constraint. Override
+# with the MAX_SOURCE_FRAMES_OVERRIDE env var if needed.
+_ON_RENDER = os.environ.get("RENDER") == "true"
+_DEFAULT_MAX_SOURCE_FRAMES = 900 if _ON_RENDER else 1800
+MAX_SOURCE_FRAMES = int(os.environ.get("MAX_SOURCE_FRAMES_OVERRIDE", _DEFAULT_MAX_SOURCE_FRAMES))
 
 
 def _compute_target_indices(total_frames, src_fps, max_output_frames):
