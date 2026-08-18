@@ -17,14 +17,10 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "webm"}
-# Render sets RENDER=true on all its instances automatically -- used here to
-# pick safe limits on Render's memory-constrained free tier (512MB RAM
-# total for PyTorch + both checkpoints + Flask + the video being processed)
-# without needing that limit locally too, where there's no such constraint.
-# MAX_UPLOAD_MB still overrides either default if set explicitly.
-_ON_RENDER = os.environ.get("RENDER") == "true"
-_DEFAULT_MAX_UPLOAD_MB = 150 if _ON_RENDER else 2048
-MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", _DEFAULT_MAX_UPLOAD_MB)) * 1024 * 1024
+# Some raw/uncompressed test clips (e.g. UBFC-rPPG .avi files) can be 1GB+;
+# real-world phone-recorded uploads are typically much smaller once
+# compressed, but this is set generously for local testing.
+MAX_CONTENT_LENGTH = 2048 * 1024 * 1024  # 2 GB
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
@@ -76,15 +72,8 @@ def predict():
             pass
 
 
-# Loaded at import time (not inside `if __name__ == "__main__"`) so this
-# also runs under gunicorn/Render, which imports `app:app` directly and
-# never executes the __main__ block. inference.py also lazy-loads on first
-# request as a fallback, but eager-loading here avoids a slow first request.
-print("Loading PhysNet checkpoints (normal-light + low-light)...")
-load_models()
-print("Models loaded.")
-
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    print(f"Starting server on http://127.0.0.1:{port}")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    print("Loading PhysNet checkpoints (normal-light + low-light)...")
+    load_models()
+    print("Models loaded. Starting server on http://127.0.0.1:5000")
+    app.run(host="0.0.0.0", port=5000, debug=False)

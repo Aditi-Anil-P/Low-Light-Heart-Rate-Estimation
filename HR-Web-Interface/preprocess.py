@@ -23,34 +23,42 @@ LARGER_BOX_COEF = 1.5
 ILLUMINATION_THRESHOLD = 80.0
 
 
-# Hard cap on output frames (after 30fps resampling), regardless of the
-# uploaded file's actual length. Kept low on Render (30s) to bound memory on
-# its 512MB free tier; restored to the full 60s used during accuracy
-# testing when running locally, where there's no such constraint. Override
-# with the MAX_SOURCE_FRAMES_OVERRIDE env var if needed.
-_ON_RENDER = os.environ.get("RENDER") == "true"
-_DEFAULT_MAX_SOURCE_FRAMES = 900 if _ON_RENDER else 1800
-MAX_SOURCE_FRAMES = int(os.environ.get("MAX_SOURCE_FRAMES_OVERRIDE", _DEFAULT_MAX_SOURCE_FRAMES))
+def read_video(video_path):
+    """Read an mp4/avi/etc. video file into an array of RGB frames [T,H,W,3] (uint8)."""
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video file: {video_path}")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    frames = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frames.append(frame)
+    cap.release()
+    if len(frames) == 0:
+        raise ValueError("No frames could be read from the video.")
+    return np.asarray(frames, dtype=np.uint8), fps
 
 
-def _compute_target_indices(total_frames, src_fps, max_output_frames):
-    """Precompute which source-frame indices to keep, resampling to 30fps
-    and capping output length, WITHOUT needing to load any frames first.
-    Returns None if total_frames is unknown/unreliable (some containers
-    misreport it) -- caller falls back to a straight sequential cap with no
-    fps correction rather than crashing.
+def resample_to_30fps(frames, src_fps):
+    """Resample a frame sequence to 30fps by nearest-index selection.
+
+    The checkpoints were trained on 30fps data (UBFC/MMPD). Arbitrary uploads
+    may come in at other frame rates, so we resample the frame index grid
+    rather than assuming 30fps.
     """
     target_fps = 30.0
-    if total_frames is None or total_frames <= 0:
-        return None
-    if src_fps is None or src_fps <= 0:
-        src_fps = target_fps
-    duration_sec = total_frames / src_fps
-    n_target = int(round(duration_sec * target_fps))
-    n_target = max(1, min(n_target, max_output_frames))
-    indices = np.linspace(0, total_frames - 1, num=n_target)
-    indices = np.clip(np.round(indices).astype(int), 0, total_frames - 1)
-    return indices.tolist()
+    if src_fps is None or src_fps <= 0 or abs(src_fps - target_fps) < 0.5:
+        return frames
+    n_src = frames.shape[0]
+    duration_sec = n_src / src_fps
+    n_target = max(1, int(round(duration_sec * target_fps)))
+    src_indices = np.linspace(0, n_src - 1, num=n_target)
+    src_indices = np.round(src_indices).astype(int)
+    src_indices = np.clip(src_indices, 0, n_src - 1)
+    return frames[src_indices]
 
 
 def detect_largest_face(frame_color):
@@ -84,116 +92,65 @@ def enlarge_box(box, frame_shape, coef=LARGER_BOX_COEF):
     return new_x, new_y, new_x2 - new_x, new_y2 - new_y
 
 
-def read_crop_and_measure(video_path, illum_sample_stride=5, use_larger_box=True):
-    """Single streaming pass over the video: reads each frame, resamples to
-    30fps and caps length, crops/resizes to FACE_SIZE x FACE_SIZE, and
-    samples illumination -- all without ever holding the full-resolution
-    decoded video in memory at once.
-
-    This matters a lot on memory-constrained deployments (e.g. Render's free
-    512MB RAM tier): a few seconds of 720p+ video decoded to raw uint8
-    frames can easily be 300-400MB by itself, on top of PyTorch/OpenCV's own
-    baseline memory use, before any processing even starts. The 72x72
-    cropped representation the model actually needs is tiny by comparison,
-    so we crop immediately per-frame and discard the full-resolution frame
-    right away instead of accumulating a big array first and cropping after.
-
-    Face detection runs once, on the first kept frame (matches BaseLoader's
-    default static/non-dynamic detection), and that box is reused for every
-    subsequent frame. Illumination is sampled independently (its own
-    per-sample face detection, for a more representative + diagnostic
-    face_found_ratio) every `illum_sample_stride`-th kept frame.
-
-    Returns dict with: cropped [N,72,72,3] float32, fps=30.0, n_frames,
-    illumination, face_found_ratio.
+def estimate_illumination(frames, sample_stride=5):
+    """Estimate mean grayscale intensity within the detected face region,
+    averaged over a sample of frames. Returns (mean_intensity, face_found_ratio).
+    Falls back to whole-frame mean intensity if no face is ever detected.
     """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"Could not open video file: {video_path}")
-    src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    total_frames_hint = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    target_indices = _compute_target_indices(total_frames_hint, src_fps, MAX_SOURCE_FRAMES)
-
-    box = None
-    cropped_frames = []
-    illum_face_vals = []
-    illum_whole_vals = []
+    n = frames.shape[0]
+    sample_idx = range(0, n, max(1, sample_stride))
+    face_vals = []
+    whole_vals = []
     faces_found = 0
-    illum_checked = 0
+    checked = 0
+    for i in sample_idx:
+        frame = frames[i]
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+        whole_vals.append(gray.mean())
+        checked += 1
+        box = detect_largest_face(frame)
+        if box is not None:
+            x, y, w, h = enlarge_box(box, frame.shape)
+            face_crop = gray[y:y + h, x:x + w]
+            if face_crop.size > 0:
+                face_vals.append(face_crop.mean())
+                faces_found += 1
+    face_found_ratio = faces_found / max(1, checked)
+    if len(face_vals) > 0:
+        return float(np.mean(face_vals)), face_found_ratio
+    return float(np.mean(whole_vals)), face_found_ratio
 
-    src_idx = 0
-    target_ptr = 0
-    kept_count = 0
 
-    while True:
-        ret, frame_bgr = cap.read()
-        if not ret:
-            break
+def crop_resize_frames(frames, use_larger_box=True):
+    """Detect the largest face on the first frame (static detection, matching
+    BaseLoader's default dynamic_detection=False), then crop and resize every
+    frame in the clip to FACE_SIZE x FACE_SIZE using that single box.
+    """
+    box = detect_largest_face(frames[0])
+    if box is None:
+        H, W = frames[0].shape[:2]
+        side = min(H, W)
+        y0 = (H - side) // 2
+        x0 = (W - side) // 2
+        box = (x0, y0, side, side)
+    if use_larger_box:
+        box = enlarge_box(box, frames[0].shape)
+    x, y, w, h = box
+    w = max(1, w)
+    h = max(1, h)
 
-        if target_indices is not None:
-            keep = target_ptr < len(target_indices) and src_idx == target_indices[target_ptr]
-            if keep:
-                target_ptr += 1
-        else:
-            # Unknown/unreliable video length metadata: fall back to a
-            # straight sequential cap with no fps resampling, rather than
-            # crashing. Rare in practice for normal uploads.
-            keep = kept_count < MAX_SOURCE_FRAMES
-
-        if keep:
-            frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-
-            if box is None:
-                detected = detect_largest_face(frame)
-                if detected is None:
-                    H, W = frame.shape[:2]
-                    side = min(H, W)
-                    y0, x0 = (H - side) // 2, (W - side) // 2
-                    detected = (x0, y0, side, side)
-                box = enlarge_box(detected, frame.shape) if use_larger_box else detected
-
-            x, y, w, h = box
-            w, h = max(1, w), max(1, h)
-            crop = frame[y:y + h, x:x + w, :]
-            if crop.size == 0:
-                crop = frame
-            resized = cv2.resize(crop, (FACE_SIZE, FACE_SIZE), interpolation=cv2.INTER_AREA)
-            cropped_frames.append(resized.astype(np.float32))
-
-            if kept_count % illum_sample_stride == 0:
-                gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-                illum_whole_vals.append(gray.mean())
-                illum_checked += 1
-                ibox = detect_largest_face(frame)
-                if ibox is not None:
-                    ix, iy, iw, ih = enlarge_box(ibox, frame.shape)
-                    face_crop = gray[iy:iy + ih, ix:ix + iw]
-                    if face_crop.size > 0:
-                        illum_face_vals.append(face_crop.mean())
-                        faces_found += 1
-
-            kept_count += 1
-            if target_indices is not None and target_ptr >= len(target_indices):
-                break
-            if target_indices is None and kept_count >= MAX_SOURCE_FRAMES:
-                break
-
-        src_idx += 1
-
-    cap.release()
-
-    if len(cropped_frames) == 0:
-        raise ValueError("No frames could be read from the video.")
-
-    face_found_ratio = faces_found / max(1, illum_checked)
-    illumination = float(np.mean(illum_face_vals)) if illum_face_vals else float(np.mean(illum_whole_vals))
-
-    return {
-        "cropped": np.asarray(cropped_frames, dtype=np.float32),
-        "n_frames": kept_count,
-        "illumination": illumination,
-        "face_found_ratio": face_found_ratio,
-    }
+    # NOTE: must be float, not uint8. diff_normalize_data() below computes
+    # frame-to-frame sums and differences; uint8 arithmetic silently wraps
+    # around (e.g. 10-250 -> 16 instead of -240), corrupting the signal.
+    # The reference BaseLoader.crop_face_resize() uses a float64 buffer for
+    # exactly this reason.
+    out = np.zeros((frames.shape[0], FACE_SIZE, FACE_SIZE, 3), dtype=np.float64)
+    for i in range(frames.shape[0]):
+        crop = frames[i, y:y + h, x:x + w, :]
+        if crop.size == 0:
+            crop = frames[i]
+        out[i] = cv2.resize(crop, (FACE_SIZE, FACE_SIZE), interpolation=cv2.INTER_AREA)
+    return out
 
 
 def diff_normalize_data(data):
@@ -224,31 +181,31 @@ def chunk_frames(data, chunk_length=CHUNK_LENGTH):
 
 
 def preprocess_video(video_path):
-    """Full pipeline: streaming read + resample to 30fps + crop/resize +
-    illumination check, then diff-normalize -> chunk into model-ready
-    tensors. See read_crop_and_measure() for why this is one streaming pass
-    instead of separate read/resample/crop steps (memory).
+    """Full pipeline: read -> resample to 30fps -> illumination check ->
+    face crop/resize -> diff-normalize -> chunk into model-ready tensors.
     """
-    result = read_crop_and_measure(video_path)
-    cropped = result["cropped"]
+    frames, src_fps = read_video(video_path)
+    frames = resample_to_30fps(frames, src_fps)
 
-    if cropped.shape[0] < CHUNK_LENGTH:
+    if frames.shape[0] < CHUNK_LENGTH:
         raise ValueError(
             f"Video too short: needs at least {CHUNK_LENGTH} frames at 30fps "
-            f"(~{CHUNK_LENGTH/30:.1f}s), got {cropped.shape[0]} frames "
-            f"(~{cropped.shape[0]/30:.1f}s)."
+            f"(~{CHUNK_LENGTH/30:.1f}s), got {frames.shape[0]} frames "
+            f"(~{frames.shape[0]/30:.1f}s)."
         )
 
-    is_low_light = result["illumination"] < ILLUMINATION_THRESHOLD
+    illumination, face_found_ratio = estimate_illumination(frames)
+    is_low_light = illumination < ILLUMINATION_THRESHOLD
 
+    cropped = crop_resize_frames(frames)
     diff_normalized = diff_normalize_data(cropped)
     chunks = chunk_frames(diff_normalized, CHUNK_LENGTH)
 
     return {
         "chunks": chunks,
-        "illumination": result["illumination"],
+        "illumination": illumination,
         "is_low_light": is_low_light,
-        "face_found_ratio": result["face_found_ratio"],
-        "n_frames": result["n_frames"],
+        "face_found_ratio": face_found_ratio,
+        "n_frames": int(frames.shape[0]),
         "fps": 30.0,
     }
