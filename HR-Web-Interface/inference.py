@@ -16,6 +16,12 @@ NORMAL_LIGHT_CKPT = os.path.join(MODELS_DIR, "UBFC_UBFC_physnet_Epoch25.pth")
 LOW_LIGHT_CKPT = os.path.join(MODELS_DIR, "MMPD_5FOLD_physnet_fold3_Epoch6.pth")
 
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# On a fractional-CPU instance (e.g. Render free tier's 0.1 CPU), torch's
+# default multi-threaded intra-op parallelism just adds thread-management
+# overhead (and memory for the thread pool) without real parallelism to
+# exploit -- a single thread is faster and lighter in practice here.
+if not torch.cuda.is_available():
+    torch.set_num_threads(1)
 
 _models = {"normal": None, "low": None}
 
