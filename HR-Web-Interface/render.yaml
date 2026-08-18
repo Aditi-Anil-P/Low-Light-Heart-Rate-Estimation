@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: hr-web-interface
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    # --workers 1: two PyTorch models are loaded once per worker process:
+    # on the free tier's 512MB RAM, a second worker loading its own copies
+    # of both checkpoints would risk an out-of-memory kill.
+    # --timeout 300: CPU inference on the free tier's 0.1 CPU allotment is
+    # much slower than a dev machine; gunicorn's default 30s worker timeout
+    # would kill a request mid-inference.
+    startCommand: "gunicorn app:app --workers 1 --timeout 300 --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

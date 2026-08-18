@@ -1,5 +1,10 @@
+# CPU-only torch wheel -- the default PyPI wheel bundles CUDA runtime libs
+# (multi-GB installed) even though Render's free tier has no GPU; this index
+# gives a much smaller, faster-to-install CPU-only build.
+--extra-index-url https://download.pytorch.org/whl/cpu
 flask>=3.0
 torch>=2.0
 opencv-python-headless>=4.8,<5
 numpy>=1.24
 scipy>=1.10
+gunicorn>=21.0

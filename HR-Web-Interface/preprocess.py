@@ -23,14 +23,24 @@ LARGER_BOX_COEF = 1.5
 ILLUMINATION_THRESHOLD = 80.0
 
 
+# Hard cap on frames read into memory, regardless of the uploaded file's
+# actual length. Whole-video concatenation gives diminishing HR-accuracy
+# returns well before this (our own testing used ~60s clips), but a
+# resource-constrained deploy (e.g. Render's free 512MB RAM tier) can't
+# afford to load an arbitrarily long/high-res video into a single array.
+# At 30fps this is 60s of footage -- comfortably more than needed.
+MAX_SOURCE_FRAMES = 1800
+
+
 def read_video(video_path):
-    """Read an mp4/avi/etc. video file into an array of RGB frames [T,H,W,3] (uint8)."""
+    """Read an mp4/avi/etc. video file into an array of RGB frames [T,H,W,3]
+    (uint8), capped at MAX_SOURCE_FRAMES to bound memory usage."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Could not open video file: {video_path}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     frames = []
-    while True:
+    while len(frames) < MAX_SOURCE_FRAMES:
         ret, frame = cap.read()
         if not ret:
             break
