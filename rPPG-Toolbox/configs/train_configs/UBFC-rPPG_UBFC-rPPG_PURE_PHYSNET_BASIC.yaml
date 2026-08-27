@@ -14,8 +14,10 @@ TRAIN:
     DATA_PATH: "data/UBFC-rPPG/raw"
     CACHED_PATH: "data/UBFC-rPPG/preprocessed"
     EXP_DATA_NAME: ""
+    # Was 0.0-0.8. Narrowed to make room for a genuinely disjoint TEST split
+    # below -- see VALID/TEST comments.
     BEGIN: 0.0
-    END: 0.8
+    END: 0.7
     PREPROCESS:
       DATA_TYPE: ['DiffNormalized']
       DATA_AUG: ['None']
@@ -43,8 +45,12 @@ VALID:
     DATA_PATH: "data/UBFC-rPPG/raw"
     CACHED_PATH: "data/UBFC-rPPG/preprocessed"
     EXP_DATA_NAME: ""
-    BEGIN: 0.8
-    END: 1.0
+    # Was 0.8-1.0 (same range TEST used to use). Used for picking the best
+    # epoch's checkpoint during training (USE_LAST_EPOCH: False), so it must
+    # stay disjoint from TEST below or the "test" metric is biased toward
+    # whatever the checkpoint was already selected to be good at.
+    BEGIN: 0.7
+    END: 0.85
     PREPROCESS:
       DATA_TYPE: ['DiffNormalized']
       DATA_AUG: ['None']
@@ -74,7 +80,10 @@ TEST:
     DATA_PATH: "data/UBFC-rPPG/raw"
     CACHED_PATH: "data/UBFC-rPPG/preprocessed"
     EXP_DATA_NAME: ""
-    BEGIN: 0.0
+    # Was 0.0-1.0 (the full dataset), which overlapped with TRAIN's
+    # 0.0-0.8 range. Now a clean 15% slice disjoint from both TRAIN
+    # (0.0-0.7) and VALID (0.7-0.85), so this is genuinely unseen data.
+    BEGIN: 0.85
     END: 1.0
     PREPROCESS:
       DATA_TYPE: ['DiffNormalized']

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Heart Rate Estimation from Facial Video</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 640px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+    background: #fafafa;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 0.2em; }
+  p.sub { color: #555; margin-top: 0; }
+  .card {
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-radius: 10px;
+    padding: 28px;
+    margin-top: 24px;
+  }
+  #dropzone {
+    border: 2px dashed #bbb;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    color: #666;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #dropzone.dragover { border-color: #4a7dff; background: #f0f4ff; }
+  input[type=file] { display: none; }
+  button {
+    margin-top: 16px;
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    background: #1a1a1a;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:disabled { background: #999; cursor: not-allowed; }
+  #result { margin-top: 20px; }
+  .bpm { font-size: 2.4rem; font-weight: 700; }
+  .meta { color: #555; font-size: 0.9rem; line-height: 1.6; margin-top: 8px; }
+  .error { color: #b00020; }
+  .filename { font-size: 0.9rem; color: #333; margin-top: 10px; }
+  #spinner { display: none; margin-top: 16px; color: #555; }
+</style>
+</head>
+<body>
+  <h1>Heart Rate Estimation from Facial Video</h1>
+  <p class="sub">Upload a facial video (any lighting condition). The app measures illumination and automatically routes to the matching model.</p>
+
+  <div class="card">
+    <div id="dropzone">
+      Drop a video here, or click to choose a file<br>
+      <span style="font-size:0.85em;">mp4, avi, mov, mkv, webm — needs at least ~4.3s of footage</span>
+    </div>
+    <input type="file" id="fileInput" accept="video/*">
+    <div class="filename" id="filename"></div>
+    <button id="submitBtn" disabled>Estimate Heart Rate</button>
+    <div id="spinner">Processing video — this can take a minute...</div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const filenameEl = document.getElementById('filename');
+    const submitBtn = document.getElementById('submitBtn');
+    const resultEl = document.getElementById('result');
+    const spinner = document.getElementById('spinner');
+    let selectedFile = null;
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) setFile(fileInput.files[0]);
+    });
+
+    function setFile(file) {
+      selectedFile = file;
+      filenameEl.textContent = 'Selected: ' + file.name;
+      submitBtn.disabled = false;
+      resultEl.innerHTML = '';
+    }
+
+    submitBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      submitBtn.disabled = true;
+      spinner.style.display = 'block';
+      resultEl.innerHTML = '';
+
+      const formData = new FormData();
+      formData.append('video', selectedFile);
+
+      try {
+        const res = await fetch('/predict', { method: 'POST', body: formData });
+        const data = await res.json();
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+
+        if (!res.ok || data.error) {
+          resultEl.innerHTML = `<p class="error">${data.error || 'Something went wrong.'}</p>`;
+          return;
+        }
+
+        resultEl.innerHTML = `
+          <div class="bpm">${data.bpm} BPM</div>
+          <div class="meta">
+            Routed to: <strong>${data.route}</strong><br>
+            Face-region illumination: ${data.illumination} / 255<br>
+            Face detected in ${Math.round(data.face_found_ratio * 100)}% of sampled frames<br>
+            Frames processed: ${data.n_frames} (${data.n_chunks} chunk${data.n_chunks === 1 ? '' : 's'} of 128)<br>
+            Full-clip (concatenated) estimate: ${data.bpm_full_clip} BPM<br>
+            Per-chunk BPM: ${data.per_chunk_bpm.join(', ')}
+          </div>
+        `;
+      } catch (err) {
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        resultEl.innerHTML = `<p class="error">Request failed: ${err}</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

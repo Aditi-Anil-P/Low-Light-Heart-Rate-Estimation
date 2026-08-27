@@ -25,6 +25,8 @@ We evaluate **PhysNet** - a 3D CNN encoder-decoder that extracts blood volume pu
 - **Retraining on MMPD low-light data (5-fold CV) with PhysNet improves robustness** over the pretrained baseline - confirming that domain-specific fine-tuning is necessary for reliable low-light HR estimation.
 - An image enhancement pipeline using **Self-Calibrated Illumination (SCI)** based on Retinex theory was explored as a preprocessing step to recover pulse-bearing skin color dynamics. Implementation challenges around training stability and compute constraints prevented full evaluation within the project scope.
 
+**Known limitation:** the UBFC baseline config originally evaluated TEST over the full dataset (0.0-1.0), overlapping with TRAIN's 0.0-0.8 split, and TEST also matched VALID exactly (VALID is used during training to pick the best epoch checkpoint, so reusing it as TEST double-dips on model selection). Corrected to a clean three-way split -- TRAIN 0.0-0.7, VALID 0.7-0.85, TEST 0.85-1.0 -- so TEST is disjoint from both. Any UBFC test numbers reported before this fix should be treated as optimistic upper bounds rather than a clean held-out evaluation. The MMPD 5-fold results are unaffected (subject-level train/test splits there don't overlap).
+
 ---
 
 ## Pipeline
