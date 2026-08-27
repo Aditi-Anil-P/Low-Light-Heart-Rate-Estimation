@@ -1,3 +1,7 @@
+
+
+
+
 # Heart Rate Estimation from Facial Video — Illumination-Routing Interface
 
 Upload any facial video (normal or low light) and get a predicted heart rate
@@ -14,9 +18,7 @@ directly on genuinely low-light footage (MMPD) instead of trying to brighten
 frames first.
 
 ## Demo
-
-<video src="demo/demo.mp4" controls width="600"></video>
-
+https://github.com/user-attachments/assets/b69c5c2c-7992-4a06-8cdb-02c441f4d42e
 ## Setup
 
 1. Install dependencies (Python 3.9+):
