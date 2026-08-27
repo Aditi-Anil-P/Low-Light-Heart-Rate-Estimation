@@ -13,6 +13,10 @@ This sidesteps the SCI low-light enhancement stage (still WIP, see
 directly on genuinely low-light footage (MMPD) instead of trying to brighten
 frames first.
 
+## Demo
+
+<video src="demo/demo.mp4" controls width="600"></video>
+
 ## Setup
 
 1. Install dependencies (Python 3.9+):
