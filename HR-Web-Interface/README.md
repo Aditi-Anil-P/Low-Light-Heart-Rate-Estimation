@@ -128,10 +128,3 @@ for a working prototype evaluated on arbitrary individual clips.
 - `models/` — the two `.pth` checkpoint files (~3MB each, included directly
   in the repo — small enough not to need Git LFS).
 
-## Deploying publicly
-
-Once this works locally, deploying it (e.g. on Render/Railway/HF Spaces)
-mainly involves: setting `app.run(host="0.0.0.0", port=...)` to read the
-platform's `PORT` env var, and switching `debug=False` (already set). A
-link can then be added to the main repo README for recruiters to try
-directly.
