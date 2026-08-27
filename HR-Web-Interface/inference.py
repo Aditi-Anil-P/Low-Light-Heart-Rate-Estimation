@@ -11,6 +11,8 @@ from physnet_model import PhysNet_padding_Encoder_Decoder_MAX
 from preprocess import preprocess_video, CHUNK_LENGTH
 from postprocess import rppg_to_bpm, aggregate_bpm
 
+MIN_CHUNKS_FOR_FULL_CLIP = 4  # see estimate_heart_rate() docstring caveat
+
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 NORMAL_LIGHT_CKPT = os.path.join(MODELS_DIR, "UBFC_UBFC_physnet_Epoch25.pth")
 LOW_LIGHT_CKPT = os.path.join(MODELS_DIR, "MMPD_5FOLD_physnet_fold3_Epoch6.pth")
@@ -79,6 +81,21 @@ def estimate_heart_rate(video_path):
     based on that evidence. Both values are still returned so this can be
     re-evaluated if more labeled test data becomes available -- 4 clips per
     checkpoint is a small sample, not a proof.
+
+    Caveat found on a real 5s personal-video upload (2 chunks, 295 frames):
+    full-clip concatenation gave 65.5 BPM while per-chunk median gave 85.9,
+    much closer to the known-accurate ~84 BPM. With only one chunk boundary
+    in a very short concatenated signal, that single stitching discontinuity
+    is a much larger fraction of total signal energy than in the longer
+    (presumably more-chunks) UBFC validation clips, so it can dominate the
+    FFT peak. The true HR peak accumulates coherently across chunks as N
+    grows, while boundary artifacts don't -- so full-clip concatenation's
+    SNR advantage should improve with more chunks and is least trustworthy
+    on short clips. MIN_CHUNKS_FOR_FULL_CLIP below encodes that: below the
+    threshold we fall back to the per-chunk median even on the "normal"
+    route. The threshold itself is a judgment call, not derived from data --
+    there's only this one failure case to go on -- so revisit it if more
+    short real-world clips with known ground truth become available.
     """
     if _models["normal"] is None or _models["low"] is None:
         load_models()
@@ -103,13 +120,16 @@ def estimate_heart_rate(video_path):
     full_rppg = np.concatenate(rppg_segments)
     full_clip_bpm = rppg_to_bpm(full_rppg, fs=30)
 
-    # Empirically route-dependent: see docstring above for the numbers.
-    final_bpm = full_clip_bpm if route == "normal" else median_bpm
+    # Empirically route-dependent: see docstring above for the numbers, and
+    # for why full-clip is skipped below MIN_CHUNKS_FOR_FULL_CLIP.
+    use_full_clip = route == "normal" and len(chunks) >= MIN_CHUNKS_FOR_FULL_CLIP
+    final_bpm = full_clip_bpm if use_full_clip else median_bpm
 
     return {
         "bpm": round(final_bpm, 1),
         "bpm_full_clip": round(full_clip_bpm, 1),
         "per_chunk_bpm": [round(b, 1) for b in per_chunk_bpm],
+        "aggregation": "full_clip" if use_full_clip else "per_chunk_median",
         "route": "low_light (MMPD)" if route == "low" else "normal_light (UBFC)",
         "illumination": round(prep["illumination"], 1),
         "face_found_ratio": round(prep["face_found_ratio"], 2),

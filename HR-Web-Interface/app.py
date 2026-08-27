@@ -35,6 +35,21 @@ def handle_http_exception(e):
     return jsonify({"error": e.description or str(e)}), e.code
 
 
+@app.errorhandler(Exception)
+def handle_uncaught_exception(e):
+    # Safety net for anything NOT already caught by predict()'s own
+    # try/except -- e.g. exceptions raised by Werkzeug while parsing a large
+    # multipart upload (request.files access, before our view body even
+    # runs). Without this, such errors fell through to Flask's default
+    # handler, which for a non-HTTPException replaces the real message with
+    # a generic "The server encountered an internal error..." page -- that's
+    # what large-file uploads were showing, with the actual cause hidden.
+    if isinstance(e, HTTPException):
+        return handle_http_exception(e)
+    traceback.print_exc()
+    return jsonify({"error": str(e) or type(e).__name__}), 500
+
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -57,9 +72,13 @@ def predict():
     ext = file.filename.rsplit(".", 1)[1].lower()
     temp_name = f"{uuid.uuid4().hex}.{ext}"
     temp_path = os.path.join(UPLOAD_DIR, temp_name)
-    file.save(temp_path)
 
     try:
+        # file.save() included here too -- for very large uploads this can
+        # itself fail (disk space, memory) before estimate_heart_rate ever
+        # runs, and was previously outside this try/except, surfacing as a
+        # generic unreadable "Internal Server Error" page instead of JSON.
+        file.save(temp_path)
         result = estimate_heart_rate(temp_path)
         return jsonify(result)
     except Exception as e:
