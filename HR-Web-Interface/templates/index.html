@@ -2,138 +2,140 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Heart Rate Estimation from Facial Video</title>
-<style>
-  :root { color-scheme: light; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    max-width: 640px;
-    margin: 60px auto;
-    padding: 0 20px;
-    color: #1a1a1a;
-    background: #fafafa;
-  }
-  h1 { font-size: 1.4rem; margin-bottom: 0.2em; }
-  p.sub { color: #555; margin-top: 0; }
-  .card {
-    background: #fff;
-    border: 1px solid #e2e2e2;
-    border-radius: 10px;
-    padding: 28px;
-    margin-top: 24px;
-  }
-  #dropzone {
-    border: 2px dashed #bbb;
-    border-radius: 8px;
-    padding: 40px 20px;
-    text-align: center;
-    color: #666;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  #dropzone.dragover { border-color: #4a7dff; background: #f0f4ff; }
-  input[type=file] { display: none; }
-  button {
-    margin-top: 16px;
-    width: 100%;
-    padding: 12px;
-    font-size: 1rem;
-    border: none;
-    border-radius: 6px;
-    background: #1a1a1a;
-    color: #fff;
-    cursor: pointer;
-  }
-  button:disabled { background: #999; cursor: not-allowed; }
-  #result { margin-top: 20px; }
-  .bpm { font-size: 2.4rem; font-weight: 700; }
-  .meta { color: #555; font-size: 0.9rem; line-height: 1.6; margin-top: 8px; }
-  .error { color: #b00020; }
-  .filename { font-size: 0.9rem; color: #333; margin-top: 10px; }
-  #spinner { display: none; margin-top: 16px; color: #555; }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <h1>Heart Rate Estimation from Facial Video</h1>
-  <p class="sub">Upload a facial video (any lighting condition). The app measures illumination and automatically routes to the matching model.</p>
 
-  <div class="card">
-    <div id="dropzone">
-      Drop a video here, or click to choose a file<br>
-      <span style="font-size:0.85em;">mp4, avi, mov, mkv, webm — needs at least ~4.3s of footage</span>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">rPPG &middot; illumination-routed PhysNet</p>
+      <h1>Heart Rate, read off your face</h1>
+      <p class="sub">Upload a facial video &mdash; any lighting. We measure the light on your face and route the clip to whichever model was trained for that condition.</p>
     </div>
-    <input type="file" id="fileInput" accept="video/*">
-    <div class="filename" id="filename"></div>
-    <button id="submitBtn" disabled>Estimate Heart Rate</button>
-    <div id="spinner">Processing video — this can take a minute...</div>
-    <div id="result"></div>
-  </div>
+    <svg class="hero-wave" id="heroWave" viewBox="0 0 800 60" preserveAspectRatio="none" aria-hidden="true">
+      <polyline id="heroWavePath" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+        points="0,30 800,30" />
+    </svg>
+  </header>
 
-  <script>
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('fileInput');
-    const filenameEl = document.getElementById('filename');
-    const submitBtn = document.getElementById('submitBtn');
-    const resultEl = document.getElementById('result');
-    const spinner = document.getElementById('spinner');
-    let selectedFile = null;
+  <main class="stage">
+    <section class="panel" id="panel" aria-live="polite">
 
-    dropzone.addEventListener('click', () => fileInput.click());
-    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropzone.classList.remove('dragover');
-      if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener('change', () => {
-      if (fileInput.files.length) setFile(fileInput.files[0]);
-    });
+      <!-- ============ 1. UPLOAD STATE ============ -->
+      <div class="state" id="state-upload" data-state="upload">
 
-    function setFile(file) {
-      selectedFile = file;
-      filenameEl.textContent = 'Selected: ' + file.name;
-      submitBtn.disabled = false;
-      resultEl.innerHTML = '';
-    }
+        <div id="dropzone" class="dropzone" role="button" tabindex="0"
+             aria-label="Choose or drop a video file to upload">
+          <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M24 6v24m0 0 9-9m-9 9-9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 34v4a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <p class="dropzone-title">Drop a video here, or click to choose one</p>
+          <p class="dropzone-hint">MP4, AVI, MOV, MKV or WEBM &middot; at least ~5 seconds of footage &middot; up to 2&nbsp;GB</p>
+        </div>
+        <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm,video/*" hidden>
 
-    submitBtn.addEventListener('click', async () => {
-      if (!selectedFile) return;
-      submitBtn.disabled = true;
-      spinner.style.display = 'block';
-      resultEl.innerHTML = '';
+        <p class="field-error" id="uploadError" hidden></p>
+      </div>
 
-      const formData = new FormData();
-      formData.append('video', selectedFile);
-
-      try {
-        const res = await fetch('/predict', { method: 'POST', body: formData });
-        const data = await res.json();
-        spinner.style.display = 'none';
-        submitBtn.disabled = false;
-
-        if (!res.ok || data.error) {
-          resultEl.innerHTML = `<p class="error">${data.error || 'Something went wrong.'}</p>`;
-          return;
-        }
-
-        resultEl.innerHTML = `
-          <div class="bpm">${data.bpm} BPM</div>
-          <div class="meta">
-            Routed to: <strong>${data.route}</strong><br>
-            Face-region illumination: ${data.illumination} / 255<br>
-            Face detected in ${Math.round(data.face_found_ratio * 100)}% of sampled frames<br>
-            Frames processed: ${data.n_frames} (${data.n_chunks} chunk${data.n_chunks === 1 ? '' : 's'} of 128)<br>
-            Full-clip (concatenated) estimate: ${data.bpm_full_clip} BPM<br>
-            Per-chunk BPM: ${data.per_chunk_bpm.join(', ')}
+      <!-- ============ 2. FILE SELECTED / PREVIEW STATE ============ -->
+      <div class="state" id="state-preview" data-state="preview" hidden>
+        <div class="preview-row">
+          <video id="previewVideo" class="preview-thumb" muted playsinline preload="metadata"></video>
+          <div class="preview-meta">
+            <p class="preview-name" id="previewName"></p>
+            <p class="preview-details" id="previewDetails"></p>
+            <p class="preview-warning" id="previewWarning" hidden></p>
+            <button type="button" class="link-btn" id="changeFileBtn">Choose a different file</button>
           </div>
-        `;
-      } catch (err) {
-        spinner.style.display = 'none';
-        submitBtn.disabled = false;
-        resultEl.innerHTML = `<p class="error">Request failed: ${err}</p>`;
-      }
-    });
-  </script>
+        </div>
+        <button type="button" class="btn btn-primary" id="submitBtn">Estimate heart rate</button>
+      </div>
+
+      <!-- ============ 3. PROCESSING STATE ============ -->
+      <div class="state state-processing" id="state-processing" data-state="processing" hidden>
+        <svg class="pulse-wave" id="pulseWave" viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true">
+          <polyline id="pulseWavePath" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="0,50 400,50" />
+        </svg>
+        <ol class="steps" id="processingSteps">
+          <li data-step="0">Reading &amp; resampling video</li>
+          <li data-step="1">Checking lighting &amp; finding your face</li>
+          <li data-step="2">Routing to the matching model</li>
+          <li data-step="3">Running inference <span class="dim">(slowest step on CPU)</span></li>
+          <li data-step="4">Extracting your heart rate</li>
+        </ol>
+        <button type="button" class="btn btn-ghost" id="cancelBtn">Cancel</button>
+      </div>
+
+      <!-- ============ 4. RESULT STATE ============ -->
+      <div class="state" id="state-result" data-state="result" hidden>
+        <div class="result-top">
+          <span class="route-badge" id="routeBadge"></span>
+          <button type="button" class="link-btn" id="copyBtn">Copy result</button>
+        </div>
+
+        <div class="bpm-display">
+          <span class="bpm-number" id="bpmNumber">--</span>
+          <span class="bpm-unit">BPM</span>
+        </div>
+        <svg class="result-wave" viewBox="0 0 400 60" preserveAspectRatio="none" aria-hidden="true">
+          <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            points="0,30 20,30 35,10 50,50 65,30 400,30" />
+        </svg>
+
+        <dl class="vitals-grid">
+          <div class="vital">
+            <dt>Face-region illumination</dt>
+            <dd>
+              <div class="meter"><div class="meter-fill" id="illuminationFill"></div></div>
+              <span class="vital-value" id="illuminationValue">&mdash;</span>
+            </dd>
+          </div>
+          <div class="vital">
+            <dt>Face detected</dt>
+            <dd>
+              <div class="meter"><div class="meter-fill meter-fill-alt" id="faceRatioFill"></div></div>
+              <span class="vital-value" id="faceRatioValue">&mdash;</span>
+            </dd>
+          </div>
+          <div class="vital">
+            <dt>Frames processed</dt>
+            <dd><span class="vital-value" id="framesValue">&mdash;</span></dd>
+          </div>
+          <div class="vital">
+            <dt>Full-clip estimate</dt>
+            <dd><span class="vital-value" id="fullClipValue">&mdash;</span></dd>
+          </div>
+        </dl>
+
+        <div class="chunks-row">
+          <p class="chunks-label">Per-chunk BPM</p>
+          <div class="chunks-list" id="chunksList"></div>
+        </div>
+
+        <button type="button" class="btn btn-primary" id="restartBtn">Estimate another video</button>
+      </div>
+
+      <!-- ============ 5. ERROR STATE ============ -->
+      <div class="state state-error" id="state-error" data-state="error" hidden>
+        <svg class="error-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+          <path d="M12 7v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="12" cy="16.5" r="1.1" fill="currentColor"/>
+        </svg>
+        <p class="error-title" id="errorTitle">Something went wrong</p>
+        <p class="error-detail" id="errorDetail"></p>
+        <button type="button" class="btn btn-primary" id="retryBtn">Try again</button>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
